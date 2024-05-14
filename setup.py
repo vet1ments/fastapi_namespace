@@ -8,6 +8,10 @@ setup(
     python_requires='>=3.11.0',
     author="no hong seok",
     author_email="vet1ments@naver.com",
+    maintainer="no hong seok",
+    maintainer_email="vet1ments@naver.com",
+    download_url="https://github.com/vet1ments/fastapi_namespace",
+    license="MIT",
     packages=find_packages(),
     install_requires=[
         "fastapi>=0.108.0"
