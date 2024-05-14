@@ -17,4 +17,5 @@ setup(
         "uvicorn>=0.9.0"
     ],
     py_modules=[splitext(basename(path))[0] for path in glob('fastapi_namespace/*.py')],
+    download_url=r"https://github.com/vet1ments/fastapi_namespace"
 )
