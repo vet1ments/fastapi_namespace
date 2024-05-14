@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: fastapi-namespace
+Version: 0.1.0
+Download-URL: https://github.com/vet1ments/fastapi_namespace
+Author: no hong seok
+Author-email: vet1ments@naver.com
+Requires-Python: >=3.11.0
+License-File: LICENSE
+Requires-Dist: fastapi>=0.108.0

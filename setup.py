@@ -4,7 +4,8 @@ from setuptools import find_packages, setup
 
 setup(
     name='fastapi_namespace',
-    version='0.1.1',
+    description="For FastAPI Routing Class",
+    version='0.1.3',
     python_requires='>=3.11.0',
     author="no hong seok",
     author_email="vet1ments@naver.com",
