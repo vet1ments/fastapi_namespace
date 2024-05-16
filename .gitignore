@@ -3,9 +3,9 @@ __pycache__/
 build
 dist
 fastapi_namespace.egg-info
-setup.py
 *.py[cod]
 *$py.class
+.venv
 
 # Distribution / packaging
 .Python

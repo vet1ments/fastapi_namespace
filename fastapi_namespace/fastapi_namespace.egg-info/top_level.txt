@@ -1,6 +1,0 @@
-__init__
-namespace
-resource
-tests
-types
-utils
