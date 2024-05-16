@@ -1,5 +1,3 @@
-from glob import glob
-from os.path import basename, splitext
 from setuptools import find_packages, setup
 
 with open("README.md", encoding="utf-8") as f:

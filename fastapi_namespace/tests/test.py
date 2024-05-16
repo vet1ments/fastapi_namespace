@@ -17,24 +17,29 @@ def depends1():
 def depends2():
     print("depends2")
 
+from fastapi import FastAPI
+from pydantic import BaseModel
+from uvicorn import run
+
+
+class ItemResponse(BaseModel):
+    id: str
+
+
 @namespace.route(
     "/",
-    dependencies=[Depends(depends0)]
 )
 class TestResource(Resource):
-    @namespace.doc(
-        summary="1234",
-        dependencies=[Depends(depends0)]
-    )
+    # @namespace.doc(
+    #     summary="1234",
+    #     dependencies=[Depends(depends0)]
+    # )
     def get(
             self,
-            a: None = Depends(depends2)
-    ):
+            a: str = Depends(depends2)
+    ) -> ItemResponse:
         pass
 
-    @namespace.doc(
-        summary="qor"
-    )
     def post(self):
         ...
 
@@ -43,6 +48,11 @@ class TestResource(Resource):
 
 
 app = FastAPI()
+
+@app.get("/items")
+def test() -> ItemResponse:
+    return ItemResponse()
+
 app.include_router(namespace)
 
 

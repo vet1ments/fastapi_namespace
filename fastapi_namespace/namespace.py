@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from fastapi.types import (
     IncEx,
 )
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse as ORJSONResponse
 from fastapi.routing import APIRoute
 from fastapi.utils import generate_unique_id
 from fastapi import Depends, Response
@@ -26,8 +26,8 @@ from typing import (
     Any,
     Literal,
 )
+from utils import delete_none
 from enum import Enum
-
 """
     실행순서
     route out
@@ -225,7 +225,7 @@ class Namespace(APIRouter):
             openapi_extra=openapi_extra,
             generate_unique_id_function=generate_unique_id_function
         )
-
+        #
         if hasattr(func.__func__, "__meth_doc__"):
             doc: MethodDocument = func.__func__.__meth_doc__
             if doc.get("dependencies") is not None and dependencies is not None:
@@ -241,13 +241,13 @@ class Namespace(APIRouter):
         kwargs.update({
             "summary": default_summary if (summary := kwargs.get("summary", None)) is None else f"{summary} {default_summary}"
         })
-        func.__func__.__meth_doc__ = kwargs
+        func.__func__.__meth_doc__ = delete_none(kwargs)
 
         self.add_api_route(
-            path,
-            func,
-            methods=[method],
-            **kwargs
+            path=path,
+            endpoint=func,
+            methods=[method.upper()],
+            **func.__func__.__meth_doc__
         )
 
     def doc(
