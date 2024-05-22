@@ -16,10 +16,17 @@ from fastapi_namespace.mixin import MixinBase
 
 def depend_test4(last: str) -> bool:
     print(last)
+
 class Test(MixinBase):
 
     global_dependencies = [Depends(depend_test4)]
 
+def depend_test5(last2: str) -> bool:
+    print(last2)
+class Test2(Test):
+    def __init__(self):
+        print(self.global_dependencies, 'gge')
+        self.global_dependencies.append(Depends(depend_test5))
 
 class ItemResponse(BaseModel):
     id: str
@@ -45,7 +52,7 @@ def depend_post(post: str) -> bool:
     print(post)
 
 @namespace.route('/{asd}')
-class Root(Test):
+class Root(Test2):
 
     global_dependencies = [Depends(depend_test), Depends(depend_test2)]
     get_dependencies = [Depends(depend_get)]

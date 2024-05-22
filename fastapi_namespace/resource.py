@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Sequence, Callable, Any, Literal
+from typing import Iterable, Callable, Any, Literal
 from fastapi.params import Depends
 from inspect import (
     Parameter,
@@ -15,15 +15,15 @@ def resource_dependant_name(key: str) -> str:
 
 
 class Resource:
-    global_dependencies: Sequence[Depends]
-    get_dependencies: Sequence[Depends]
-    post_dependencies: Sequence[Depends]
-    put_dependencies: Sequence[Depends]
-    delete_dependencies: Sequence[Depends]
-    options_dependencies: Sequence[Depends]
-    head_dependencies: Sequence[Depends]
-    patch_dependencies: Sequence[Depends]
-    trace_dependencies: Sequence[Depends]
+    global_dependencies: Iterable[Depends]
+    get_dependencies: Iterable[Depends]
+    post_dependencies: Iterable[Depends]
+    put_dependencies: Iterable[Depends]
+    delete_dependencies: Iterable[Depends]
+    options_dependencies: Iterable[Depends]
+    head_dependencies: Iterable[Depends]
+    patch_dependencies: Iterable[Depends]
+    trace_dependencies: Iterable[Depends]
 
     def get_dependant(self, method_handler, depends: Depends) -> Callable:
         assert isinstance(depends, Depends), "Dependant must be of type Depends!"
