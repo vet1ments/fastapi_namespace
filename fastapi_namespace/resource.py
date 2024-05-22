@@ -7,13 +7,14 @@ from inspect import (
     signature,
     iscoroutinefunction
 )
-from .typings import MethodHandler, MethodType
+from .typings import MethodHandler, MethodType, ResourceProtocol
 from .utils import gen_op_id
 
 def resource_dependant_name(key: str) -> str:
     return f'{key}_dependencies'
 
-class Resource(metaclass=ABCMeta):
+
+class Resource:
     global_dependencies: Sequence[Depends]
     get_dependencies: Sequence[Depends]
     post_dependencies: Sequence[Depends]
@@ -23,10 +24,6 @@ class Resource(metaclass=ABCMeta):
     head_dependencies: Sequence[Depends]
     patch_dependencies: Sequence[Depends]
     trace_dependencies: Sequence[Depends]
-
-    def __init__(self):
-        self._init = False
-
 
     def get_dependant(self, method_handler, depends: Depends) -> Callable:
         assert isinstance(depends, Depends), "Dependant must be of type Depends!"
@@ -41,7 +38,7 @@ class Resource(metaclass=ABCMeta):
 
         async def async_wrap(**kwargs):
             kwargs.pop(op_id, None)
-            return method_handler(**kwargs)
+            return await method_handler(**kwargs)
 
         params = [
             Parameter(name=op_id, kind=Parameter.POSITIONAL_OR_KEYWORD, default=depends),
@@ -69,12 +66,14 @@ class Resource(metaclass=ABCMeta):
         method_name: MethodType = method_handler.__name__
 
         method_dependencies = getattr(self, resource_dependant_name(method_name), [])
+        method_dependencies = [*method_dependencies]
         method_dependencies.reverse()
         global_dependencies = getattr(self, resource_dependant_name('global'), [])
+        global_dependencies = [*global_dependencies]
         global_dependencies.reverse()
 
-        method_dependencies.extend(global_dependencies)
+        dependencies = [*method_dependencies, *global_dependencies]
 
-        for depends in method_dependencies:
+        for depends in dependencies:
             method_func = self.get_dependant(method_func, depends)
         return method_func

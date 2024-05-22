@@ -12,6 +12,14 @@ namespace = Namespace(
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi_namespace.mixin import MixinBase
+
+def depend_test4(last: str) -> bool:
+    print(last)
+class Test(MixinBase):
+
+    global_dependencies = [Depends(depend_test4)]
+
 
 class ItemResponse(BaseModel):
     id: str
@@ -37,10 +45,11 @@ def depend_post(post: str) -> bool:
     print(post)
 
 @namespace.route('/{asd}')
-class Root(Resource):
-    __method_dependant__ = [Depends(depend_test), Depends(depend_test2)]
-    __get_dependant__ = [Depends(depend_get)]
-    __post_dependant__ = [Depends(depend_post)]
+class Root(Test):
+
+    global_dependencies = [Depends(depend_test), Depends(depend_test2)]
+    get_dependencies = [Depends(depend_get)]
+    post_dependencies = [Depends(depend_post)]
     def get(self) -> ItemResponse:
         return ItemResponse(id="1234")
 
