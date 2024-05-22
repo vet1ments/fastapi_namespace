@@ -1,8 +1,8 @@
-from starlette.types import (
-    ASGIApp,
-    Lifespan
-)
-from starlette.routing import BaseRoute
+from starlette.routing import BaseRoute, Match
+from starlette.types import ASGIApp, Lifespan, Receive, Scope, Send
+from starlette.datastructures import URL
+from starlette.responses import RedirectResponse
+from starlette._utils import get_route_path
 from fastapi import APIRouter
 from fastapi.types import (
     IncEx,
@@ -10,14 +10,14 @@ from fastapi.types import (
 from fastapi.responses import JSONResponse as ORJSONResponse
 from fastapi.routing import APIRoute
 from fastapi.utils import generate_unique_id
-from fastapi import Depends, Response
+from fastapi import Response
+from fastapi.params import Depends
 
 from .resource import Resource
 from .types import (
     MethodDocument,
     DecoratedCallable
 )
-
 from typing import (
     Optional,
     Callable,
@@ -40,8 +40,8 @@ from enum import Enum
 
 __methods__ = ['get', 'post', 'put', 'delete', 'options', 'head', 'patch', 'trace']
 
-class Namespace(APIRouter):
 
+class Namespace(APIRouter):
     def __init__(
             self,
             *,
@@ -78,6 +78,14 @@ class Namespace(APIRouter):
             include_in_schema=include_in_schema,
             generate_unique_id_function=generate_unique_id_function
         )
+        self.get = None
+        self.post = None
+        self.put = None
+        self.delete = None
+        self.options = None
+        self.head = None
+        self.patch = None
+        self.trace = None
 
     def route(
             self,
@@ -243,9 +251,12 @@ class Namespace(APIRouter):
         })
         func.__func__.__meth_doc__ = delete_none(kwargs)
 
+        new_func = func.__self__.get_method_handler(
+            func
+        )
         self.add_api_route(
             path=path,
-            endpoint=func,
+            endpoint=new_func,
             methods=[method.upper()],
             **func.__func__.__meth_doc__
         )

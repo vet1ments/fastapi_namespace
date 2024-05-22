@@ -1,57 +1,52 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Path
 from fastapi_namespace.namespace import Namespace, Resource
 
-def dpends_base():
-    print("depends Base")
+async def test(b: str, asd: str = Path(...), c:str = "") -> bool:
+    print(asd, b, c)
+    return 1
 
 namespace = Namespace(
-    dependencies=[Depends(dpends_base)]
+    prefix="/abcv",
+    dependencies=[Depends(test)]
 )
-
-def depends0():
-    print("depends0")
-
-def depends1():
-    print("depends1")
-
-def depends2():
-    print("depends2")
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from uvicorn import run
-
 
 class ItemResponse(BaseModel):
     id: str
 
 
-@namespace.route(
-    "/",
-)
-class TestResource(Resource):
-    # @namespace.doc(
-    #     summary="1234",
-    #     dependencies=[Depends(depends0)]
-    # )
-    def get(
-            self,
-            a: str = Depends(depends2)
-    ) -> ItemResponse:
-        pass
-
-    def post(self):
-        ...
-
-    async def put(self):
-        ...
 
 
 app = FastAPI()
 
-@app.get("/items")
-def test() -> ItemResponse:
-    return ItemResponse()
+
+
+
+def depend_test(arg: str, arg2: str) -> bool:
+    print(arg, arg2)
+
+def depend_test2(arg3: str, arg4: str) -> bool:
+    print(arg3, arg4)
+
+def depend_get(get: str) -> bool:
+    print(get)
+
+def depend_post(post: str) -> bool:
+    print(post)
+
+@namespace.route('/{asd}')
+class Root(Resource):
+    __method_dependant__ = [Depends(depend_test), Depends(depend_test2)]
+    __get_dependant__ = [Depends(depend_get)]
+    __post_dependant__ = [Depends(depend_post)]
+    def get(self) -> ItemResponse:
+        return ItemResponse(id="1234")
+
+    async def post(self) -> ItemResponse:
+        return ItemResponse(id="1234")
+
 
 app.include_router(namespace)
 
