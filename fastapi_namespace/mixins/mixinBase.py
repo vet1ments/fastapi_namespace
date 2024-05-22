@@ -1,20 +1,10 @@
 from fastapi_namespace.resource import Resource
 from fastapi_namespace.utils import delete_none
 from fastapi_namespace.typings import MethodType
-from typing import ClassVar, Iterable, Sequence, Literal
+from typing import Iterable
 from fastapi.params import Depends
 
 class _Meta(type):
-    global_dependencies: Iterable[Depends]
-    get_dependencies: Iterable[Depends]
-    post_dependencies: Iterable[Depends]
-    put_dependencies: Iterable[Depends]
-    delete_dependencies: Iterable[Depends]
-    options_dependencies: Iterable[Depends]
-    head_dependencies: Iterable[Depends]
-    patch_dependencies: Iterable[Depends]
-    trace_dependencies: Iterable[Depends]
-
     def __new__(mcs, name, bases, namespace):
         global_dependencies: Iterable[Depends] = getattr(bases[0], 'global_dependencies', None)
         if global_dependencies is not None:
@@ -85,36 +75,36 @@ class MixinBase(Resource, metaclass=_Meta):
     patch_dependencies: Iterable[Depends]
     trace_dependencies: Iterable[Depends]
 
-    def _add_depends(self, type_: MethodType, depends: Depends):
+    def _add_depends(self, type_: MethodType, depends: Depends) -> None:
         assert isinstance(depends, Depends), "Depends must be a Depends"
         key = f'{type_}_dependencies'
         dependencies = getattr(self, key, [])
         dependencies.append(depends)
         setattr(self, key, dependencies)
 
-    def add_global_depends(self, depends: Depends):
+    def add_global_depends(self, depends: Depends) -> None:
         return self._add_depends('global', depends)
 
-    def add_get_depends(self, depends: Depends):
+    def add_get_depends(self, depends: Depends) -> None:
         return self._add_depends('get', depends)
 
-    def add_post_depends(self, depends: Depends):
+    def add_post_depends(self, depends: Depends) -> None:
         return self._add_depends('post', depends)
 
-    def add_put_depends(self, depends: Depends):
+    def add_put_depends(self, depends: Depends) -> None:
         return self._add_depends('put', depends)
 
-    def add_delete_depends(self, depends: Depends):
+    def add_delete_depends(self, depends: Depends) -> None:
         return self._add_depends('delete', depends)
 
-    def add_options_depends(self, depends: Depends):
+    def add_options_depends(self, depends: Depends) -> None:
         return self._add_depends('options', depends)
 
-    def add_head_depends(self, depends: Depends):
+    def add_head_depends(self, depends: Depends) -> None:
         return self._add_depends('head', depends)
 
-    def add_patch_depends(self, depends: Depends):
+    def add_patch_depends(self, depends: Depends) -> None:
         return self._add_depends('patch', depends)
 
-    def add_trace_depends(self, depends: Depends):
+    def add_trace_depends(self, depends: Depends) -> None:
         return self._add_depends('trace', depends)

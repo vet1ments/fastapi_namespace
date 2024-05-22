@@ -41,7 +41,7 @@ class Token(TypedDict):
 class OAuth2Class(OAuth2AuthorizationCodeBearer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
     async def __call__(self, request: Request) -> str | None:
         authorization = request.headers.get("Authorization")
         scheme, param = get_authorization_scheme_param(authorization)
@@ -89,9 +89,23 @@ class OpaqueMixin(MixinBase):
         return token_urlsafe(48)
 
     def _get_access_token_key(self, token: str) -> str:
+        """
+        Args:
+            token: 토큰
+
+        Returns:
+            {self.access_token_key}/{token}
+        """
         return f"{self.access_token_key}/{token}"
 
     def _get_refresh_token_key(self, token: str) -> str:
+        """
+        Args:
+            token: 토큰
+
+        Returns:
+            {self.refresh_token_key}/{token}
+        """
         return f"{self.refresh_token_key}/{token}"
 
     def _get_user_access_token_key(self, user_id: str) -> str:
