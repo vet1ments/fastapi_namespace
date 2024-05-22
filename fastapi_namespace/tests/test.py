@@ -12,7 +12,7 @@ namespace = Namespace(
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from fastapi_namespace.mixin import MixinBase
+from fastapi_namespace.mixins import MixinBase
 
 def depend_test4(last: str) -> bool:
     print(last)
@@ -24,9 +24,13 @@ class Test(MixinBase):
 def depend_test5(last2: str) -> bool:
     print(last2)
 class Test2(Test):
+    check = 4567
     def __init__(self):
-        print(self.global_dependencies, 'gge')
-        self.global_dependencies.append(Depends(depend_test5))
+        self.add_global_depends(Depends(self.getAge))
+
+    def getAge(self, age: int):
+        print('454545', age)
+        print(self.check)
 
 class ItemResponse(BaseModel):
     id: str

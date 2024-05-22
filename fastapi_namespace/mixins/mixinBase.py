@@ -1,8 +1,8 @@
-from .resource import Resource
+from fastapi_namespace.resource import Resource
+from fastapi_namespace.utils import delete_none
+from fastapi_namespace.typings import MethodType
 from typing import ClassVar, Iterable, Sequence, Literal
 from fastapi.params import Depends
-from .utils import delete_none
-from .typings import DependsType, MethodType
 
 class _Meta(type):
     global_dependencies: Iterable[Depends]
