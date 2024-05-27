@@ -26,23 +26,19 @@ def _default_validate(validator: TypeAdapter, data: dict) -> bool:
 def validate_opaque_token(data: dict, extra: Literal['forbid', 'allow', 'ignore'] = 'forbid') -> bool:
     OpaqueToken.__pydantic_config__ = ConfigDict(extra=extra)
     OpaqueTokenValidator = TypeAdapter(OpaqueToken)
-    OpaqueToken.__pydantic_config__ = None
     return _default_validate(OpaqueTokenValidator, data)
 
 def validate_opaque_token_info(data: dict, extra: Literal['forbid', 'allow', 'ignore'] = 'forbid') -> bool:
     OpaqueTokenInfo.__pydantic_config__ = ConfigDict(extra=extra)
     OpaqueTokenInfoValidator = TypeAdapter(OpaqueTokenInfo)
-    OpaqueTokenInfo.__pydantic_config__ = None
     return _default_validate(OpaqueTokenInfoValidator, data)
 
 def validate_jwt_token(data: dict, extra: Literal['forbid', 'allow', 'ignore'] = 'forbid') -> bool:
     JWTToken.__pydantic_config__ = ConfigDict(extra=extra)
     JWTTokenValidator = TypeAdapter(JWTToken)
-    JWTToken.__pydantic_config__ = None
     return _default_validate(JWTTokenValidator, data)
 
 def validate_jwt_token_info(data: dict, extra: Literal['forbid', 'allow', 'ignore'] = 'forbid') -> bool:
     JWTTokenInfo.__pydantic_config__ = ConfigDict(extra=extra)
     JWTTokenInfoValidator = TypeAdapter(JWTTokenInfo)
-    JWTTokenInfo.__pydantic_config__ = None
     return _default_validate(JWTTokenInfoValidator, data)
