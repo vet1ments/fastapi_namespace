@@ -21,12 +21,18 @@ MethodType = Literal["get", "post", "put", "delete", "patch", "head", "options",
 TokenType = Literal["ACCESS", "REFRESH"]
 TokenKey = NewType('TokenKey', str)
 UserTokenKey = NewType('UserTokenKey', str)
-RawToken = NewType("RawToken", str)
+# RawToken = NewType("RawToken", str)
 
-TokenLimit = NewType("TokenLimit", int)
-TokenExpire = NewType("TokenExpire", int)
-TokenIdentify = NewType("TokenIdentify", int)
-TokenPayload = NewType("TokenPayload", int)
+RawToken = str
+
+# TokenLimit = NewType("TokenLimit", int)
+TokenLimit = int
+# TokenExpire = NewType("TokenExpire", int)
+TokenExpire = int
+# TokenIdentify = NewType("TokenIdentify", int)
+TokenIdentify = str
+# TokenPayload = NewType("TokenPayload", dict[str, Any])
+TokenPayload = dict[str, Any]
 UserIdentify = Union[int, str]
 
 class Token(TypedDict):

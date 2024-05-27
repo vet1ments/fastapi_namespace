@@ -42,6 +42,7 @@ from typing import (
     Generic,
     TypeVar,
     Iterable,
+    Coroutine
 )
 from functools import partial
 from orjson import dumps, loads
@@ -482,7 +483,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
         if user_tokens is None:
             await default()
         elif isinstance(user_tokens, Iterable):
-            await default(user_tokens=user_tokens)
+            await default(user_tokens=[i for i in user_tokens])
         elif isinstance(user_tokens, str):
             await default(user_token=[user_tokens])
         else:
@@ -498,7 +499,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
         if user_tokens is None:
             await default()
         elif isinstance(user_tokens, Iterable):
-            await default(user_tokens=user_tokens)
+            await default(user_tokens=[i for i in user_tokens])
         elif isinstance(user_tokens, str):
             await default(user_token=[user_tokens])
         else:

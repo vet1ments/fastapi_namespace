@@ -56,6 +56,8 @@ def depend_get(get: str) -> bool:
 def depend_post(post: str) -> bool:
     print(post)
 
+from fastapi import Security
+
 @namespace.route('/{asd}')
 class Root(OpaqueTokenMixin):
 
