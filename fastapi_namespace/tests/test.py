@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Path
 from fastapi_namespace.namespace import Namespace, Resource
+from fastapi_namespace.mixins.token import OpaqueTokenMixin
 
 async def test(b: str, asd: str = Path(...), c:str = "") -> bool:
     print(asd, b, c)
@@ -56,7 +57,7 @@ def depend_post(post: str) -> bool:
     print(post)
 
 @namespace.route('/{asd}')
-class Root(Test2):
+class Root(OpaqueTokenMixin):
 
     global_dependencies = [Depends(depend_test), Depends(depend_test2)]
     get_dependencies = [Depends(depend_get)]

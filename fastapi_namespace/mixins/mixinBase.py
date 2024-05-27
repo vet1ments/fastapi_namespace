@@ -2,6 +2,7 @@ from fastapi_namespace.resource import Resource
 from fastapi_namespace.utils import delete_none
 from fastapi_namespace.typings import MethodType
 from typing import Iterable
+from abc import ABCMeta
 from fastapi.params import Depends
 
 class _Meta(type):
@@ -64,7 +65,10 @@ class _Meta(type):
         }))
         return type.__new__(mcs, name, bases, namespace)
 
-class MixinBase(Resource, metaclass=_Meta):
+class __Meta(_Meta, ABCMeta):
+    pass
+
+class MixinBase(Resource, metaclass=__Meta):
     global_dependencies: Iterable[Depends]
     get_dependencies: Iterable[Depends]
     post_dependencies: Iterable[Depends]
