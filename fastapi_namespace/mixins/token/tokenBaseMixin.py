@@ -151,7 +151,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             if len((tokens := await pipe.smembers(key))) == 0:
                 return
             await pipe.watch(*tokens)
-            tokens_for_delete = [i async for i in (await pipe.exists(i) for i in tokens) if i == 0]
+            tokens_for_delete = [i[0] async for i in ((i, await pipe.exists(i)) for i in tokens) if i[1] == 0]
             if len(tokens_for_delete) == 0:
                 return
             pipe.multi()
@@ -398,10 +398,10 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
 
             return [self._TokenInfo(
                 token=i.split('/')[1],
-                expires_in=await pipe.ttl(i),
+                expires_in=ttl,
                 **token
             )
-            for i in tokens if self._token_validator((token := self._Token(**loads(await pipe.get(i)))))]
+            for i in tokens if self._token_validator((token := self._Token(**loads(await pipe.get(i))))) and (ttl := await pipe.ttl(i)) > 5]
 
         await self._manage_user_token(rd=rd, key=key)
         res: list[TI] = await rd.transaction(

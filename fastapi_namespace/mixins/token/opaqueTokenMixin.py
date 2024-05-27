@@ -19,7 +19,7 @@ class OpaqueTokenMixin(TokenBaseMixin[OpaqueToken, OpaqueTokenInfo]):
         return token_urlsafe(48)
 
     def _make_token(self, token: Token) -> OpaqueTokenInfo:
-        OpaqueTokenInfo(
+        return OpaqueTokenInfo(
             **token,
             idf=uuid4().hex
         )

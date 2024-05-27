@@ -23,6 +23,7 @@ setup(
         "fastapi>=0.108.0"
     ],
     tests_require=[
-        "uvicorn>=0.9.0"
+        "uvicorn>=0.9.0",
+        "fastapi-redis-vet1ments>=0.2.6"
     ],
 )

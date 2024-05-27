@@ -16,15 +16,14 @@ from typing_extensions import (
     NotRequired
 )
 
-MethodType = Literal["get", "post", "put", "delete", "patch", "head", "options", "trace"]
 
-TokenType = Literal["ACCESS", "REFRESH"]
 TokenKey = NewType('TokenKey', str)
 UserTokenKey = NewType('UserTokenKey', str)
+
+MethodType = Literal["get", "post", "put", "delete", "patch", "head", "options", "trace"]
+TokenType = Literal["ACCESS", "REFRESH"]
 # RawToken = NewType("RawToken", str)
-
 RawToken = str
-
 # TokenLimit = NewType("TokenLimit", int)
 TokenLimit = int
 # TokenExpire = NewType("TokenExpire", int)
