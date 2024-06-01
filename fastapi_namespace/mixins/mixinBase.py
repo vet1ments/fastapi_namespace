@@ -5,6 +5,7 @@ from typing import Iterable
 from abc import ABCMeta
 from fastapi.params import Depends
 
+
 class _Meta(type):
     def __new__(mcs, name, bases, namespace):
         global_dependencies: Iterable[Depends] = getattr(bases[0], 'global_dependencies', None)
@@ -65,8 +66,12 @@ class _Meta(type):
         }))
         return type.__new__(mcs, name, bases, namespace)
 
+
 class __Meta(_Meta, ABCMeta):
-    pass
+    """
+    종합 Mixin
+    """
+
 
 class MixinBase(Resource, metaclass=__Meta):
     global_dependencies: Iterable[Depends]

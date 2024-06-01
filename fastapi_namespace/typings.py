@@ -1,8 +1,8 @@
 from typing import Literal, Callable, Any, NewType, Protocol, Sequence
 from fastapi.params import Depends
 
-MethodType_ = Literal["get", "post", "put", "delete", 'options', 'head', 'patch', 'trace']
-MethodType: MethodType_ = NewType('MethodType', MethodType_)
+MethodType = Literal["get", "post", "put", "delete", 'options', 'head', 'patch', 'trace']
+
 MethodHandler = Callable[[Any], Any]
 DependsType = Literal[
     'global_dependencies',

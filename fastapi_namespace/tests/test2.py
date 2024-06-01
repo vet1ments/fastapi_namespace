@@ -1,3 +1,5 @@
+import typing
+
 from fastapi_namespace.mixins.token import OpaqueTokenMixin
 from fastapi_namespace.mixins.token.typings import UserIdentify
 from fastapi_namespace import Namespace
@@ -17,7 +19,8 @@ namespace = Namespace(
 class Root(OpaqueTokenMixin):
     access_token_limit = 10
     refresh_token_limit = 10
-    access_token_expire = 10
+    # access_token_expire = 10
+
     @namespace.doc(summary="가져오기 토큰 테스트")
     async def get(
             self,
@@ -45,8 +48,9 @@ class Root(OpaqueTokenMixin):
             type: Literal["ACCESS", "REFRESH"],
             identify: UserIdentify,
             rd: AsyncRedisClient = Depends(redis.get_connection)
-    ):
+    ) -> None:
         a = await self._abort_user_type_token(rd=rd, identify=identify, type=type, user_tokens=None)
+
 
 
 
@@ -67,5 +71,12 @@ if __name__ == "__main__":
     from uvicorn import run
     run(
         app=app,
-        port=23457
+        port=23451
     )
+
+
+
+
+from typing import TypeVar, Generic
+from logging import Logger
+

@@ -16,7 +16,10 @@ from fastapi.params import Depends
 from .resource import Resource
 from .types import (
     MethodDocument,
-    DecoratedCallable
+    DecoratedCallable,
+)
+from .typings import (
+    MethodType
 )
 from typing import (
     Optional,
@@ -38,7 +41,7 @@ from enum import Enum
 
 """
 
-__methods__ = ['get', 'post', 'put', 'delete', 'options', 'head', 'patch', 'trace']
+__methods__: list[MethodType] = ['get', 'post', 'put', 'delete', 'options', 'head', 'patch', 'trace']
 
 
 class Namespace(APIRouter):
@@ -113,7 +116,7 @@ class Namespace(APIRouter):
             callbacks: list[BaseRoute] | None = None,
             openapi_extra: dict[str, Any] | None = None,
             generate_unique_id_function: Callable[[APIRoute], str] = generate_unique_id,
-    ) -> Callable[[Resource], Resource]:
+    ) -> Callable[[type[Resource]], type[Resource]]:
         """
         FastAPI APIRoute Class에 deprecated 된 route 함수를 overwriting 하여 사용
 
@@ -142,7 +145,7 @@ class Namespace(APIRouter):
             openapi_extra:
             generate_unique_id_function:
         """
-        def wrap(class_: Resource) -> Resource:
+        def wrap(class_: type[Resource]) -> type[Resource]:
             instance = class_()
             assert isinstance(instance, Resource), "Instance must be of type Resource"
             for meth in __methods__:
@@ -183,7 +186,7 @@ class Namespace(APIRouter):
     def _add_method(
             self,
             path,
-            method: Literal['get', 'post', 'put', 'delete', 'options', 'head', 'patch', 'trace'],
+            method: MethodType,
             func,
             *,
             response_model: Any = None,
@@ -261,8 +264,8 @@ class Namespace(APIRouter):
             **func.__func__.__meth_doc__
         )
 
+    @staticmethod
     def doc(
-            self,
             summary: str | None = None,
             description: str | None = None,
             name: str | None = None,

@@ -1,12 +1,4 @@
-import asyncio
-
 from ..mixinBase import MixinBase
-from .utils import (
-    validate_opaque_token,
-    validate_opaque_token_info,
-    validate_jwt_token,
-    validate_jwt_token_info
-)
 from .typings import (
     TokenLimit,
     TokenKey,
@@ -24,39 +16,35 @@ from .typings import (
     AsyncPipeline,
     TokenPayload,
     Token,
-    TokenInfo
 )
-from .utils import (
-    validate_opaque_token,
-    validate_opaque_token_info,
-    validate_jwt_token,
-    validate_jwt_token_info
-)
-
-from abc import abstractmethod
 from typing import (
     Callable,
     Union,
+    Awaitable,
     ParamSpec,
     TypeAlias,
     Generic,
     TypeVar,
     Iterable,
-    Coroutine
+    Coroutine,
+    Any,
+    Optional
 )
+from abc import abstractmethod
+import asyncio
 from functools import partial
 from orjson import dumps, loads
 
 P = ParamSpec("P")
-_TokenInfos = Union[OpaqueTokenInfo, JWTTokenInfo]
-_Tokens = Union[OpaqueToken, JWTToken]
-TI = TypeVar("TI", bound=_TokenInfos)
-T = TypeVar("T", bound=_Tokens)
+TI = TypeVar("TI", OpaqueTokenInfo, JWTTokenInfo)
+T = TypeVar("T", OpaqueToken, JWTToken)
 TokenKeyHandler = Callable[[RawToken], TokenKey]
-UserTokenKeyHandler: TypeAlias = Callable[[UserIdentify], UserTokenKey]
-_validator: TypeAlias = Callable[[dict], bool]
+UserTokenKeyHandler = Callable[[UserIdentify], UserTokenKey]
+_validator: TypeAlias = Callable[[dict[str, Any]], bool]
 TokenValidator = _validator
 TokenInfoValidator = _validator
+CallableToken = Callable[..., T]
+CallableTokenInfo = Callable[..., TI]
 
 
 class TokenBaseMixin(Generic[T, TI], MixinBase):
@@ -73,18 +61,18 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
 
     def __init__(
             self,
-            token: T,
-            token_info: TI,
+            token: CallableToken,
+            token_info: CallableTokenInfo,
             token_validator: TokenValidator,
             token_info_validator: TokenInfoValidator
     ):
-        self._Token: T = token
-        self._TokenInfo: TI = token_info
+        self._Token = token
+        self._TokenInfo = token_info
         self._token_validator = token_validator
         self._token_info_validator = token_info_validator
 
     @abstractmethod
-    def create_token(self) -> RawToken:
+    def create_token(self, *args, **kwarg) -> RawToken:
         pass
 
     @abstractmethod
@@ -102,6 +90,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             return self._get_access_token_key
         elif type == "REFRESH":
             return self._get_refresh_token_key
+        raise ValueError(f"Token type must be ACCESS or REFRESH")
 
     def _get_user_access_token_key(self, idf: UserIdentify) -> UserTokenKey:
         return UserTokenKey(f"{self.user_access_token_key}/{idf}")
@@ -114,8 +103,9 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             return self._get_user_access_token_key
         elif type == "REFRESH":
             return self._get_user_refresh_token_key
+        raise ValueError(f"Token type must be ACCESS or REFRESH")
 
-    async def _regist_token(
+    async def _register_token(
             self,
             rd: AsyncRedis,
             key: UserTokenKey,
@@ -123,9 +113,22 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             token_expire: TokenExpire,
             **kwargs
     ) -> tuple[RawToken, TokenKey]:
+        """``Redis`` 에 토큰 등록
+
+        * class 내부 사용됨
+
+        Args:
+            rd: Async Redis Client
+            key:
+            token_key_handler:
+            token_expire: 토큰 만료 시간
+            **kwargs: 토큰 만들때 인자로 넘겨줌
+
+        Returns:
+            * ``tuple[0]`` = ``RawToken``
+            * ``tuple[1]`` = ``TokenKey``
         """
-        Redis에 Token 등록
-        """
+
         while await rd.sadd(
                 key,
                 (
@@ -136,40 +139,55 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
         ) == 0:
             pass
         await rd.expire(key, token_expire)
-        return RawToken(token), TokenKey(token_key)
+        return token, TokenKey(token_key)
 
+    @staticmethod
     async def _manage_user_token(
-            self,
             rd: AsyncRedis,
             key: UserTokenKey
     ) -> None:
-        """
-        이미 지워진 토큰 들을 user token list 에서 삭제함
-        """
+        """uid로 등록된 토큰을 관리함
 
+        * class 내부 사용
+
+        Args:
+            rd: Async Redis client
+            key:
+        """
         async def wrap(pipe: AsyncPipeline, key: UserTokenKey):
             if len((tokens := await pipe.smembers(key))) == 0:
                 return
             await pipe.watch(*tokens)
-            tokens_for_delete = [i[0] async for i in ((i, await pipe.exists(i)) for i in tokens) if i[1] == 0]
+
+            async def _gen():
+                for i in tokens:
+                    yield i, await pipe.exists(i)
+
+            tokens_for_delete = [i[0] async for i in _gen() if i[1] == 0]
             if len(tokens_for_delete) == 0:
                 return
             pipe.multi()
-            _: AsyncPipeline = pipe.srem(key, *tokens_for_delete)
+            await pipe.srem(key, *tokens_for_delete)
 
         await rd.transaction(
             partial(wrap, key=key),
             key
         )
 
+    @staticmethod
     async def _manage_user_token_count(
-            self,
             rd: AsyncRedis,
             key: UserTokenKey,
             limit: TokenLimit
     ) -> None:
-        """
-        토큰 갯수 제한이 있을때 user token 리스트와 토큰들의 갯수를 관리해줌
+        """토큰 갯수 제한시 토큰을 관리함
+
+        * class 내부 사용
+
+        Args:
+            rd: Async Redis client
+            key: User Token key
+            limit: 토큰 제한 갯수
         """
 
         async def wrap(
@@ -188,8 +206,8 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
                 delete_tokens.sort(key=lambda x: x[1])
                 delete_tokens = delete_tokens[:delete_count]
                 pipe.multi()
-                _: AsyncPipeline = pipe.delete(*(d := [i[0] for i in delete_tokens]))
-                _: AsyncPipeline = pipe.srem(key, *d)
+                _: Awaitable = pipe.delete(*(d := [i[0] for i in delete_tokens]))
+                _: Awaitable = pipe.srem(key, *d)
             return
 
         await rd.transaction(
@@ -205,12 +223,16 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             type: TokenType,
             **kwargs,
     ) -> TI:
-        """
+        """토큰 만든 후 Redis에 저장
+
+        * Class 내부 사용
+        * 직접 사용 금지 ``create_access_token`` ``create_refresh_token`` 을 사용
+
         Args:
-            rd:
+            rd: Async Redis Client
             payload:
-            identify:
-            type:
+            identify: Redis 내 사용될 uid
+            type: ACCESS or REFRESH
             **kwargs: create_token 의 인자로 넘겨줌
         """
         if type == 'ACCESS':
@@ -220,12 +242,12 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             token_limit = self.refresh_token_limit
             token_expire = self.refresh_token_expire
         else:
-            raise AttributeError("type muste be ACCESS or REFRESH")
+            raise AttributeError("type must be ACCESS or REFRESH")
 
         get_token_key = self._get_token_key_handler(type)
         get_user_token_key = self._get_user_token_key_handler(type)
 
-        user_token_key: UserTokenKey = get_user_token_key(identify)
+        user_token_key = get_user_token_key(identify)
 
         # 토큰 갯수 및 존재 여부 관리
         await self._manage_user_token(rd=rd, key=user_token_key)
@@ -243,21 +265,21 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             token = dumps(token)
             if await pipe.sismember(user_token_key, token_key) == 1:
                 pipe.multi()
-                _: AsyncPipeline = pipe.set(token_key, token)
-                _: AsyncPipeline = pipe.expire(token_key, token_expire)
+                _: Awaitable = pipe.set(token_key, token)
+                _: Awaitable = pipe.expire(token_key, token_expire)
                 return True
             else:
                 return False
 
-        get_raw_token_and_token_key = partial(
-            self._regist_token,
+        get_token_info = partial[TI](self._make_token, token=Token(uid=identify, payload=payload))
+        get_raw_token_and_token_key = partial[Coroutine[Any, Any, tuple[RawToken, TokenKey]]](
+            self._register_token,
             rd=rd,
             key=user_token_key,
             token_key_handler=get_token_key,
             token_expire=token_expire,
             **kwargs
         )
-        get_token_info = partial(self._make_token, token=Token(uid=identify, payload=payload))
         while not await rd.transaction(
                 partial(
                     transaction,
@@ -271,8 +293,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
         ):
             pass
 
-        ttl = await rd.ttl(result[1])
-        token_info: TI
+        ttl: int = await rd.ttl(result[1])
         token_info["expires_in"] = ttl
         token_info["token"] = result[0]
         return token_info
@@ -289,7 +310,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             rd:
             payload:
             identify:
-            **kwargs: create token의 인자로 넘어감
+            **kwargs: ``create_token`` 인자로 넘어감
         """
         return await self._create_type_token(
             rd=rd,
@@ -311,7 +332,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             rd:
             payload:
             identify:
-            **kwargs: create token의 인자로 넘어감
+            **kwargs: ``create_token`` 인자로 넘어감
         """
         return await self._create_type_token(
             rd=rd,
@@ -326,7 +347,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             rd: AsyncRedis,
             token: RawToken,
             type: TokenType = "ACCESS",
-    ) -> TI | None:
+    ) -> Optional[TI]:
         get_token_key = self._get_token_key_handler(type)
         token_key = get_token_key(token)
 
@@ -334,13 +355,13 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
                 pipe: AsyncPipeline,
                 raw_token: RawToken,
                 key: TokenKey
-        ) -> TI | None:
-            if (_token := await pipe.get(key)) is None:
+        ) -> Optional[TI]:
+            if (__token := await pipe.get(key)) is None:
                 await pipe.unwatch()
                 return None
 
-            token = self._Token(**loads(_token))
-            if not self._token_validator(token):
+            _token = self._Token(**loads(__token))
+            if not self._token_validator(_token):
                 return None
 
             ttl = await rd.ttl(key)
@@ -348,7 +369,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             return self._TokenInfo(
                 token=raw_token,
                 expires_in=ttl,
-                **token
+                **_token
             )
 
         return await rd.transaction(
@@ -365,14 +386,14 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             self,
             rd: AsyncRedis,
             token: RawToken,
-    ) -> TI | None:
+    ) -> Optional[TI]:
         return await self.get_type_token(rd=rd, token=token, type="ACCESS")
 
     async def get_refresh_token(
             self,
             rd: AsyncRedis,
             token: RawToken,
-    ) -> TI | None:
+    ) -> Optional[TI]:
         return await self.get_type_token(rd=rd, token=token, type="REFRESH")
 
     async def _get_user_type_tokens(
@@ -395,13 +416,15 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
                 return []
 
             await pipe.watch(*tokens)
-
-            return [self._TokenInfo(
-                token=i.split('/')[1],
-                expires_in=ttl,
-                **token
-            )
-            for i in tokens if self._token_validator((token := self._Token(**loads(await pipe.get(i))))) and (ttl := await pipe.ttl(i)) > 5]
+            ttl = None
+            return [
+                self._TokenInfo(
+                    token=i.split('/')[1],
+                    expires_in=ttl,
+                    **token
+                )
+                for i in tokens if self._token_validator((token := self._Token(**loads(await pipe.get(i))))) and (ttl := await pipe.ttl(i)) > 5
+            ]
 
         await self._manage_user_token(rd=rd, key=key)
         res: list[TI] = await rd.transaction(
@@ -461,8 +484,8 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
                 return
 
             pipe.multi()
-            _: AsyncPipeline = pipe.srem(key, *tokens_for_delete)
-            _: AsyncPipeline = pipe.delete(*tokens_for_delete)
+            _: Awaitable = pipe.srem(key, *tokens_for_delete)
+            _: Awaitable = pipe.delete(*tokens_for_delete)
 
         get_token_key = self._get_token_key_handler(type)
         get_user_token_key = self._get_user_token_key_handler(type)

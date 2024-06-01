@@ -3,8 +3,13 @@ from fastapi import Depends, Response
 from fastapi.types import IncEx
 from fastapi.routing import APIRoute
 
-from typing import TypedDict, NotRequired, Sequence, Type, Any, Callable, TypeVar
+from typing import Sequence, Type, Any, Callable, TypeVar
+from typing_extensions import (
+    TypedDict,
+    NotRequired
+)
 from enum import Enum
+
 
 class MethodDocument(TypedDict):
     response_model: NotRequired[Any]
