@@ -28,9 +28,11 @@ from typing import (
     Type,
     Any,
     Literal,
+    get_type_hints,
 )
 from .utils import delete_none
 from enum import Enum
+
 """
     실행순서
     route out
@@ -145,6 +147,7 @@ class Namespace(APIRouter):
             openapi_extra:
             generate_unique_id_function:
         """
+
         def wrap(class_: type[Resource]) -> type[Resource]:
             instance = class_()
             assert isinstance(instance, Resource), "Instance must be of type Resource"
@@ -181,6 +184,7 @@ class Namespace(APIRouter):
                     generate_unique_id_function=generate_unique_id_function
                 )
             return class_
+
         return wrap
 
     def _add_method(
@@ -250,7 +254,8 @@ class Namespace(APIRouter):
             })
         default_summary = f"{func.__self__.__class__.__name__}_{func.__name__}"
         kwargs.update({
-            "summary": default_summary if (summary := kwargs.get("summary", None)) is None else f"{summary} {default_summary}"
+            "summary": default_summary if (summary := kwargs.get("summary",
+                                                                 None)) is None else f"{summary} {default_summary}"
         })
         func.__func__.__meth_doc__ = delete_none(kwargs)
 
@@ -294,8 +299,15 @@ class Namespace(APIRouter):
         callbacks = callbacks or []
 
         def wrap(func: DecoratedCallable) -> DecoratedCallable:
+            type_hints = get_type_hints(func)
+
+            _response_model = response_model
+
+            if not _response_model and (return_type := type_hints.get('return', None)):
+                _response_model = return_type
+
             func.__meth_doc__ = MethodDocument(
-                response_model=response_model,
+                response_model=_response_model,
                 status_code=status_code,
                 tags=tags,
                 dependencies=dependencies,
@@ -319,6 +331,7 @@ class Namespace(APIRouter):
                 generate_unique_id_function=generate_unique_id_function,
             )
             return func
+
         return wrap
 
     @staticmethod

@@ -1,6 +1,8 @@
+import uuid
+
 from redis.asyncio import Redis
 from redis.asyncio.client import Pipeline
-
+from redis import Redis
 AsyncRedis = Redis
 """
 Async ``RedisClient``
@@ -17,12 +19,15 @@ from typing import (
     Any,
     Union,
     Generic,
+    Optional,
+    TypeVar,
     TypeAlias
 )
 from typing_extensions import (
     TypedDict,
     NotRequired
 )
+from dataclasses import dataclass, field
 
 
 TokenKey = NewType('TokenKey', str)
@@ -51,37 +56,51 @@ TokenPayload = dict[str, Any]
 UserIdentify = Union[int, str]
 
 
-class Token(TypedDict):
+
+@dataclass
+class Token:
     """토큰 Base
 
-    다른 토큰 Mixin 생성시 이것을 상속 받을 것
+        다른 토큰 Mixin 생성시 이것을 상속 받을 것
 
-    Attributes:
-        payload:
-            토큰 페이 로드
-        uid:
-            Redis 에 등록될 때 구분할 uid
-    """
+        Attributes:
+            payload:
+                토큰 페이 로드
+            uid:
+                Redis 에 등록될 때 구분할 uid
+        """
     payload: TokenPayload
     uid: UserIdentify
 
 
-class TokenInfo(TypedDict):
-    token: RawToken
-    expires_in: NotRequired[TokenExpire]
-
-
+@dataclass
 class OpaqueToken(Token):
-    idf: TokenIdentify
+    idf: TokenIdentify = field(default=lambda x: uuid.uuid4().hex)
 
 
-class OpaqueTokenInfo(TokenInfo, OpaqueToken):
-    pass
-
-
+@dataclass
 class JWTToken(Token):
-    jti: TokenIdentify
+    jti: TokenIdentify = field(default=lambda x: uuid.uuid4().hex)
 
 
-class JWTTokenInfo(TokenInfo, JWTToken):
-    pass
+T = TypeVar('T', bound=Token)
+
+
+@dataclass
+class TokenInfo(Generic[T]):
+    info: T
+    token: Optional[RawToken] = ''
+    expires_in: Optional[TokenExpire] = 0
+
+
+@dataclass
+class OpaqueTokenInfo(TokenInfo[OpaqueToken]):
+    info: OpaqueToken
+
+
+@dataclass
+class JWTTokenInfo(TokenInfo[JWTToken]):
+    info: JWTToken
+
+
+

@@ -1,18 +1,38 @@
-from fastapi_namespace.utils import validate_typeddict
-from typing_extensions import TypedDict, NotRequired
+from fastapi.security.base import SecurityBase as SecurityBase_
+from typing import ParamSpec, Callable, TypeVar, Optional, Generic
+from dataclasses import dataclass
+
+P = ParamSpec("P")
+TBase = TypeVar("TBase")
+ValidateFunction = Callable[P, TBase]
+T = TypeVar("T", )
 
 
-class Test(TypedDict):
-    a: str
-    b: str
-    c: str
+class SecurityBase:
+    def __init__(self):
+        self.validate: Optional[Callable] = None
 
 
-class InheritTest(Test):
-    d: str
+def validate(a: str):
+    print('hi')
 
 
-t = InheritTest(a="a", b='1', d="1", c="3", k="333")
+sec = SecurityBase()
+sec.validate = validate
+sec.validate()
 
-validate = validate_typeddict(InheritTest, t, extra="forbid")
-print(validate)
+
+
+def catch_exception(function: Callable[P, T]) -> Callable[P, Optional[T]]:
+    def decorator(*args: P.args, **kwargs: P.kwargs) -> Optional[T]:
+        try:
+            return function(*args, **kwargs)
+        except Exception:
+            return None
+    return decorator
+
+@catch_exception
+def div(arg: int) -> float:
+    return arg / arg
+
+a = div()

@@ -25,7 +25,8 @@ class Resource:
     patch_dependencies: Iterable[Depends]
     trace_dependencies: Iterable[Depends]
 
-    def get_dependant(self, method_handler, depends: Depends) -> Callable:
+    @staticmethod
+    def get_dependant(method_handler, depends: Depends) -> Callable:
         assert isinstance(depends, Depends), "Dependant must be of type Depends!"
         method_handler_signature = signature(method_handler)
         method_handler_parameters = method_handler_signature.parameters
@@ -77,3 +78,9 @@ class Resource:
         for depends in dependencies:
             method_func = self.get_dependant(method_func, depends)
         return method_func
+
+    def get(self): pass
+    def post(self): pass
+    def delete(self): pass
+    def put(self): pass
+    def patch(self): pass

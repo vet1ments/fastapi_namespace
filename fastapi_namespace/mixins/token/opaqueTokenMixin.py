@@ -7,6 +7,7 @@ from .tokenBaseMixin import (
 from .typings import (
     OpaqueTokenInfo,
     OpaqueToken,
+    JWTToken,
     TokenInfo,
     RawToken,
     Token
@@ -15,6 +16,7 @@ from fastapi_namespace.utils import get_typeddict_validator
 from secrets import token_urlsafe
 from uuid import uuid4
 from typing_extensions import TypedDict
+from dataclasses import asdict
 
 
 class OpaqueTokenMixin(TokenBaseMixin[OpaqueToken, OpaqueTokenInfo]):
@@ -38,7 +40,12 @@ class OpaqueTokenMixin(TokenBaseMixin[OpaqueToken, OpaqueTokenInfo]):
         return token_urlsafe(48)
 
     def _make_token(self, token: Token) -> OpaqueTokenInfo:
+        # return OpaqueTokenInfo(
+        #     **token,
+        #     idf=uuid4().hex
+        # )
+        OpaqueToken(**asdict(token))
         return OpaqueTokenInfo(
-            **token,
-            idf=uuid4().hex
+            info=OpaqueToken(**asdict(token)),
         )
+

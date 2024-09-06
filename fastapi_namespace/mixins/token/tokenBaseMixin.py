@@ -16,6 +16,7 @@ from .typings import (
     AsyncPipeline,
     TokenPayload,
     Token,
+TokenInfo
 )
 from typing import (
     Callable,
@@ -33,36 +34,195 @@ from typing import (
 from abc import abstractmethod
 import asyncio
 from functools import partial
-from orjson import dumps, loads
+from orjson import dumps as _dumps, loads
+from .sercurity.base import SecurityBase
+from typing import Union
+from dataclasses import dataclass, asdict
 
-P = ParamSpec("P")
-TI = TypeVar("TI", OpaqueTokenInfo, JWTTokenInfo)
-T = TypeVar("T", OpaqueToken, JWTToken)
+
+
+T = TypeVar("T", bound=Token)
+# TI = TypeVar("TI", OpaqueTokenInfo, JWTTokenInfo)
+TI = TypeVar("TI", bound=TokenInfo)
+
 TokenKeyHandler = Callable[[RawToken], TokenKey]
 UserTokenKeyHandler = Callable[[UserIdentify], UserTokenKey]
 _validator: TypeAlias = Callable[[dict[str, Any]], bool]
 TokenValidator = _validator
 TokenInfoValidator = _validator
-CallableToken = Callable[..., T]
-CallableTokenInfo = Callable[..., TI]
+# CallableToken = Callable[..., T]
+# CallableTokenInfo = Callable[..., TI]
+CallableToken = type[T]
+CallableTokenInfo = type[TI]
+
+def dumps(data):
+    print(data, 'werwer')
+    return _dumps(asdict(data))
 
 
-class TokenBaseMixin(Generic[T, TI], MixinBase):
-    access_token_limit: TokenLimit | None = 1
-    refresh_token_limit: TokenLimit | None = 1
-    access_token_expire: TokenExpire = 3600
-    refresh_token_expire: TokenExpire = 129600
-    user_access_token_key: str = 'user_access_token'
-    user_refresh_token_key: str = 'user_refresh_token'
-    access_token_key: str = 'access_token'
-    refresh_token_key: str = 'refresh_token'
-    oauth2_route: list[MethodType] = []
-    oauth2_class: Callable = None
+
+
+class TransactionCore:
+    @staticmethod
+    async def _manage_user_token_transaction(pipe: AsyncPipeline, key: UserTokenKey):
+        """
+        ``Redis`` 내 토큰 관리
+
+        만료 된 토큰은 ``UserTokenList`` 에서 삭제 함
+        """
+        if len((tokens := await pipe.smembers(key))) == 0:
+            return
+        await pipe.watch(*tokens)
+
+        async def _gen():
+            for i in tokens:
+                yield i, await pipe.exists(i)
+
+        tokens_for_delete = [i[0] async for i in _gen() if i[1] == 0]
+        if len(tokens_for_delete) == 0:
+            return
+        pipe.multi()
+        await pipe.srem(key, *tokens_for_delete)
+
+    @staticmethod
+    async def _manage_user_token_count_transaction(
+            pipe: AsyncPipeline,
+            key: UserTokenKey,
+            limit: TokenLimit
+    ) -> None:
+        """``Redis`` 내에 토큰 갯수 관리
+        """
+        if len((tokens := await pipe.smembers(key))) == 0:
+            return
+        await pipe.watch(*tokens)
+        token_count = len(tokens)
+
+        if token_count >= limit:
+            delete_count = limit - token_count + 1  # 무조건 음수
+            delete_tokens = [(i, await pipe.ttl(i)) for i in tokens]
+            delete_tokens.sort(key=lambda x: x[1])
+            delete_tokens = delete_tokens[:delete_count]
+            pipe.multi()
+            _: Awaitable = pipe.delete(*(d := [i[0] for i in delete_tokens]))
+            _: Awaitable = pipe.srem(key, *d)
+        return
+
+    @staticmethod
+    async def _add_token_transaction(
+            pipe: AsyncPipeline,
+            user_token_key: UserTokenKey,
+            token_key: TokenKey,
+            token: Token,
+            token_expire: TokenExpire
+    ) -> bool:
+        """``Redis`` 내에 토큰 등록
+        """
+        token = dumps(token)
+        if await pipe.sismember(user_token_key, token_key) == 1:
+            pipe.multi()
+            _: Awaitable = pipe.set(token_key, token)
+            _: Awaitable = pipe.expire(token_key, token_expire)
+            return True
+        else:
+            return False
+
+    @staticmethod
+    async def _get_token_transaction(
+            pipe: AsyncPipeline,
+            raw_token: RawToken,
+            key: TokenKey,
+            token: CallableToken,
+            token_info: CallableTokenInfo,
+            token_validator: TokenValidator,
+    ) -> Optional[TI]:
+        """``Redis`` 에서 토큰 가져오기
+        """
+        if (__token := await pipe.get(key)) is None:
+            await pipe.unwatch()
+            return None
+
+        _token = token(**loads(__token))
+        if not token_validator(_token):
+            return None
+
+        ttl = await pipe.ttl(key)
+
+        return token_info(
+            token=raw_token,
+            expires_in=ttl,
+            **_token
+        )
+
+    @staticmethod
+    async def _get_user_tokens_transaction(
+            pipe: AsyncPipeline,
+            key: UserTokenKey,
+            token: CallableToken,
+            token_info: CallableTokenInfo,
+            token_validator: TokenValidator,
+    ) -> list[TI]:
+        """``Redis`` 에서 특정 유저의 토큰 가져오기
+        """
+        tokens = await pipe.smembers(key)
+        if len(tokens) == 0:
+            return []
+
+        await pipe.watch(*tokens)
+        ttl = None
+        return [
+            token_info(
+                token=i.split('/')[1],
+                expires_in=ttl,
+                **_token
+            )
+            for i in tokens if token_validator((_token := token(**loads(await pipe.get(i))))) and (ttl := await pipe.ttl(i)) > 5
+        ]
+
+    @staticmethod
+    async def _abort_user_token_transaction(
+            pipe: AsyncPipeline,
+            key: UserTokenKey,
+            get_token_key: TokenKeyHandler,
+            user_tokens: list[RawToken] | None = None
+    ) -> None:
+        """``Redis`` 에서 특정 유저의 토큰을 취소
+        """
+        tokens = await pipe.smembers(key)
+        if len(tokens) == 0:
+            return
+
+        if user_tokens is None or len(user_tokens) == 0:
+            tokens_for_delete = list(tokens)
+        else:
+            tokens_for_delete = [d for i in user_tokens if (d := get_token_key(i)) in tokens]
+
+        if len(tokens_for_delete) == 0:
+            return
+
+        pipe.multi()
+        _: Awaitable = pipe.srem(key, *tokens_for_delete)
+        _: Awaitable = pipe.delete(*tokens_for_delete)
+
+
+
+
+
+class TokenBaseMixin(Generic[T, TI], MixinBase, TransactionCore):
+    access_token_limit: Optional[TokenLimit] | None = 1
+    refresh_token_limit: Optional[TokenLimit] | None = 1
+    access_token_expire: Optional[TokenExpire] = 3600
+    refresh_token_expire: Optional[TokenExpire] = 129600
+    user_access_token_key: Optional[str] = 'user_access_token'
+    user_refresh_token_key: Optional[str] = 'user_refresh_token'
+    access_token_key: Optional[str] = 'access_token'
+    refresh_token_key: Optional[str] = 'refresh_token'
+    security_route: Optional[list[MethodType]] = []
+    security_class: Optional[SecurityBase] = None
 
     def __init__(
             self,
-            token: CallableToken,
-            token_info: CallableTokenInfo,
+            token: type[T],
+            token_info: type[TI],
             token_validator: TokenValidator,
             token_info_validator: TokenInfoValidator
     ):
@@ -141,8 +301,8 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
         await rd.expire(key, token_expire)
         return token, TokenKey(token_key)
 
-    @staticmethod
     async def _manage_user_token(
+            self,
             rd: AsyncRedis,
             key: UserTokenKey
     ) -> None:
@@ -154,28 +314,13 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             rd: Async Redis client
             key:
         """
-        async def wrap(pipe: AsyncPipeline, key: UserTokenKey):
-            if len((tokens := await pipe.smembers(key))) == 0:
-                return
-            await pipe.watch(*tokens)
-
-            async def _gen():
-                for i in tokens:
-                    yield i, await pipe.exists(i)
-
-            tokens_for_delete = [i[0] async for i in _gen() if i[1] == 0]
-            if len(tokens_for_delete) == 0:
-                return
-            pipe.multi()
-            await pipe.srem(key, *tokens_for_delete)
-
         await rd.transaction(
-            partial(wrap, key=key),
+            partial(self._manage_user_token_transaction, key=key),
             key
         )
 
-    @staticmethod
     async def _manage_user_token_count(
+            self,
             rd: AsyncRedis,
             key: UserTokenKey,
             limit: TokenLimit
@@ -189,29 +334,8 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             key: User Token key
             limit: 토큰 제한 갯수
         """
-
-        async def wrap(
-                pipe: AsyncPipeline,
-                key: UserTokenKey,
-                limit: TokenLimit
-        ) -> None:
-            if len((tokens := await pipe.smembers(key))) == 0:
-                return
-            await pipe.watch(*tokens)
-            token_count = len(tokens)
-
-            if token_count >= limit:
-                delete_count = limit - token_count + 1  # 무조건 음수
-                delete_tokens = [(i, await pipe.ttl(i)) for i in tokens]
-                delete_tokens.sort(key=lambda x: x[1])
-                delete_tokens = delete_tokens[:delete_count]
-                pipe.multi()
-                _: Awaitable = pipe.delete(*(d := [i[0] for i in delete_tokens]))
-                _: Awaitable = pipe.srem(key, *d)
-            return
-
         await rd.transaction(
-            partial(wrap, key=key, limit=limit),
+            partial(self._manage_user_token_count_transaction, key=key, limit=limit),
             key
         )
 
@@ -255,22 +379,6 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             await self._manage_user_token_count(rd=rd, key=user_token_key, limit=token_limit)
 
         # 토큰 제작
-        async def transaction(
-                pipe: AsyncPipeline,
-                user_token_key: UserTokenKey,
-                token_key: TokenKey,
-                token: Token,
-                token_expire: TokenExpire
-        ) -> bool:
-            token = dumps(token)
-            if await pipe.sismember(user_token_key, token_key) == 1:
-                pipe.multi()
-                _: Awaitable = pipe.set(token_key, token)
-                _: Awaitable = pipe.expire(token_key, token_expire)
-                return True
-            else:
-                return False
-
         get_token_info = partial[TI](self._make_token, token=Token(uid=identify, payload=payload))
         get_raw_token_and_token_key = partial[Coroutine[Any, Any, tuple[RawToken, TokenKey]]](
             self._register_token,
@@ -282,7 +390,7 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
         )
         while not await rd.transaction(
                 partial(
-                    transaction,
+                    self._add_token_transaction,
                     user_token_key=user_token_key,
                     token_key=(result := await get_raw_token_and_token_key())[1],
                     token=(token_info := get_token_info()),
@@ -346,41 +454,56 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             self,
             rd: AsyncRedis,
             token: RawToken,
-            type: TokenType = "ACCESS",
-    ) -> Optional[TI]:
-        get_token_key = self._get_token_key_handler(type)
-        token_key = get_token_key(token)
+            type: Optional[TokenType] = None,
+    ) -> Optional[TI | tuple[TI, TI]]:
+        """
+        Returns:
+            type == None 이면
 
-        async def transaction(
-                pipe: AsyncPipeline,
-                raw_token: RawToken,
-                key: TokenKey
-        ) -> Optional[TI]:
-            if (__token := await pipe.get(key)) is None:
-                await pipe.unwatch()
-                return None
-
-            _token = self._Token(**loads(__token))
-            if not self._token_validator(_token):
-                return None
-
-            ttl = await rd.ttl(key)
-
-            return self._TokenInfo(
-                token=raw_token,
-                expires_in=ttl,
-                **_token
+            * tuple[0] : ACCESS TOKEN INFO
+            * tuple[1] : REFRESH TOKEN INFO
+        """
+        kwargs = {
+            "token": self._Token,
+            "token_info": self._TokenInfo,
+            "token_validator": self._token_validator,
+        }
+        if type is None:
+            return await asyncio.gather(
+                rd.transaction(
+                    partial(
+                        self._get_token_transaction,
+                        raw_token=token,
+                        key=(token_key := self._get_token_key_handler("ACCESS")(token)),
+                        **kwargs
+                    ),
+                    token_key,
+                    value_from_callable=True
+                ),
+                rd.transaction(
+                    partial(
+                        self._get_token_transaction,
+                        raw_token=token,
+                        key=(token_key := self._get_token_key_handler("REFRESH")(token)),
+                        **kwargs
+                    ),
+                    token_key,
+                    value_from_callable=True
+                ),
             )
-
-        return await rd.transaction(
-            partial(
-                transaction,
-                raw_token=token,
-                key=token_key,
-            ),
-            token_key,
-            value_from_callable=True
-        )
+        else:
+            get_token_key = self._get_token_key_handler(type)
+            token_key = get_token_key(token)
+            return await rd.transaction(
+                partial(
+                    self._get_token_transaction,
+                    raw_token=token,
+                    key=token_key,
+                    **kwargs
+                ),
+                token_key,
+                value_from_callable=True
+            )
 
     async def get_access_token(
             self,
@@ -407,28 +530,15 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
 
         key = get_user_token_key(identify)
 
-        async def transaction(
-                pipe: AsyncPipeline,
-                key: UserTokenKey
-        ) -> list[TI]:
-            tokens = await pipe.smembers(key)
-            if len(tokens) == 0:
-                return []
-
-            await pipe.watch(*tokens)
-            ttl = None
-            return [
-                self._TokenInfo(
-                    token=i.split('/')[1],
-                    expires_in=ttl,
-                    **token
-                )
-                for i in tokens if self._token_validator((token := self._Token(**loads(await pipe.get(i))))) and (ttl := await pipe.ttl(i)) > 5
-            ]
-
         await self._manage_user_token(rd=rd, key=key)
         res: list[TI] = await rd.transaction(
-            partial(transaction, key=key),
+            partial(
+                self._get_user_tokens_transaction,
+                key=key,
+                token=self._Token,
+                token_info=self._TokenInfo,
+                token_validator=self._token_validator,
+            ),
             key,
             value_from_callable=True
         )
@@ -465,34 +575,12 @@ class TokenBaseMixin(Generic[T, TI], MixinBase):
             type: TokenType,
             user_tokens: list[RawToken] | None = None,
     ) -> None:
-        async def transaction(
-                pipe: AsyncPipeline,
-                key: UserTokenKey,
-                get_token_key: TokenKeyHandler,
-                user_tokens: list[RawToken] | None = None
-        ) -> None:
-            tokens = await pipe.smembers(key)
-            if len(tokens) == 0:
-                return
-
-            if user_tokens is None or len(user_tokens) == 0:
-                tokens_for_delete = list(tokens)
-            else:
-                tokens_for_delete = [d for i in user_tokens if (d := get_token_key(i)) in tokens]
-
-            if len(tokens_for_delete) == 0:
-                return
-
-            pipe.multi()
-            _: Awaitable = pipe.srem(key, *tokens_for_delete)
-            _: Awaitable = pipe.delete(*tokens_for_delete)
-
         get_token_key = self._get_token_key_handler(type)
         get_user_token_key = self._get_user_token_key_handler(type)
         user_token_key = get_user_token_key(identify)
 
         await rd.transaction(
-            partial(transaction, key=user_token_key, get_token_key=get_token_key, user_tokens=user_tokens),
+            partial(self._abort_user_token_transaction, key=user_token_key, get_token_key=get_token_key, user_tokens=user_tokens),
             user_token_key
         )
 
