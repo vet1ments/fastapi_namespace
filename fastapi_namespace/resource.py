@@ -79,8 +79,8 @@ class Resource:
             method_func = self.get_dependant(method_func, depends)
         return method_func
 
-    def get(self): pass
-    def post(self): pass
-    def delete(self): pass
-    def put(self): pass
-    def patch(self): pass
+    def get(self, *args, **kwargs): pass
+    def post(self, *args, **kwargs): pass
+    def delete(self, *args, **kwargs): pass
+    def put(self, *args, **kwargs): pass
+    def patch(self, *args, **kwargs): pass
